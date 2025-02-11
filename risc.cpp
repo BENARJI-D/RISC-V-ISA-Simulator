@@ -51,7 +51,7 @@ void write_memory(uint32_t address, uint32_t value, int size) {
 }
 
 int main() {
-    parse_and_store("input.txt");
+    parse_and_store("ven.mem");
 
     // Demonstration of reading and writing
     write_memory(0x1000, 0xDEADBEEF, 4);
