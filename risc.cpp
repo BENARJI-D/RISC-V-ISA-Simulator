@@ -6,7 +6,7 @@
 using namespace std;
 
 unordered_map<uint32_t, uint8_t> memory; // Memory using associative array
-uint32_t registers[32]; // Simulated registers
+uint32_t registers[32]; // Simulate registers
 
 void parse_and_store(const char *filename) {
     FILE *file = fopen(filename, "r");
