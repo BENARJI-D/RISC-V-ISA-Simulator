@@ -1,13 +1,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <unordered_map>
+#include <map> // Change from unordered_map to map
 
 using namespace std;
 
-unordered_map<uint32_t, uint8_t> memory; // Memory using associative array
+map<uint32_t, uint8_t> memory; // Ordered map for memory
 uint32_t registers[32]; // Simulated registers
 uint32_t pc = 0; // Program Counter initialized to 0
+
+// Function to perform sign extension dynamically
+uint32_t sign_extend(uint32_t value) {
+    int bit_count = 0;
+    uint32_t temp = value;
+
+    while (temp) { // Count how many bits are in use
+        temp >>= 1;
+        bit_count++;
+    }
+
+    if (bit_count >= 32) {
+        return value;
+    }
+
+    uint32_t sign_bit = 1 << (bit_count - 1);
+    if (value & sign_bit) {
+        value |= (0xFFFFFFFF << bit_count);
+    }
+
+    return value;
+}
 
 // Function to parse and store the memory image file
 void parse_and_store(const char *filename) {
@@ -19,38 +41,48 @@ void parse_and_store(const char *filename) {
 
     char line[50]; // Buffer to hold each line
     uint32_t address, value;
-    uint8_t temp_bytes[4] = {0}; // Temporary storage for assembling 4-byte words
-    uint32_t temp_address = 0;   // Stores the address of the first byte in an instruction
-    int bytes_stored = 0;        // Tracks number of bytes stored for the current word
+    uint8_t temp_bytes[4] = {0}; // Temporary buffer to store bytes
+    uint32_t temp_address = 0;   // Address where the first byte of an instruction is stored
+    int bytes_stored = 0;        // Tracks how many bytes we have stored in temp_bytes
 
     while (fgets(line, sizeof(line), file)) {
         if (sscanf(line, "%x: %x", &address, &value) == 2) {
             int num_bytes = (value <= 0xFF) ? 1 : (value <= 0xFFFF) ? 2 : 4; // Determine byte count
 
-            // If new address is discontinuous, reset tracking
+            // If bytes_stored is not 0 and we are continuing at the next contiguous address, store contiguously
             if (bytes_stored > 0 && address != temp_address + bytes_stored) {
-                printf("Warning: Non-contiguous memory detected at 0x%X\n", address);
-                bytes_stored = 0;
+                // Store the previous set of bytes in memory before processing the new address
+                for (int i = 0; i < bytes_stored; i++) {
+                    memory[temp_address + i] = temp_bytes[i];
+                }
+                bytes_stored = 0; // Reset buffer
             }
 
-            // Store bytes in little-endian format into temp buffer
+            // Set the base address for this chunk
+            if (bytes_stored == 0) {
+                temp_address = address;
+            }
+
+            // Store new bytes in little-endian format
             for (int i = 0; i < num_bytes; i++) {
                 temp_bytes[bytes_stored] = (value >> (8 * i)) & 0xFF;
                 bytes_stored++;
             }
 
-            // Set the base address when we start a new instruction
-            if (bytes_stored == num_bytes) {
-                temp_address = address;
-            }
-
-            // When we reach 4 bytes, store them in memory
+            // If we have accumulated 4 bytes, store them in memory
             if (bytes_stored == 4) {
                 for (int i = 0; i < 4; i++) {
                     memory[temp_address + i] = temp_bytes[i];
                 }
-                bytes_stored = 0; // Reset for next instruction
+                bytes_stored = 0; // Reset buffer
             }
+        }
+    }
+
+    // If there are leftover bytes (not forming a full 4-byte word), store them in memory
+    if (bytes_stored > 0) {
+        for (int i = 0; i < bytes_stored; i++) {
+            memory[temp_address + i] = temp_bytes[i];
         }
     }
 
@@ -58,24 +90,11 @@ void parse_and_store(const char *filename) {
     printf("Memory image successfully loaded.\n");
 }
 
-// Function to print stored memory content for verification
-void print_memory(uint32_t start_address, uint32_t num_instructions) {
-    printf("\n--- Loaded Memory Content (Little-Endian Order) ---\n");
-    for (uint32_t addr = start_address; addr < start_address + (num_instructions * 4); addr += 4) {
-        uint32_t instruction = (memory[addr]) |
-                               (memory[addr + 1] << 8) |
-                               (memory[addr + 2] << 16) |
-                               (memory[addr + 3] << 24);
-        printf("0x%08X: 0x%08X\n", addr, instruction);
-    }
-    printf("-------------------------------------------------\n");
-}
 
 // Read 1, 2, or 4 bytes from memory (little-endian format)
-uint32_t read_memory(uint32_t address, int size) {
+uint32_t read_memory(uint32_t address, int size = 4) {
     uint32_t value = 0;
 
-    // Ensure size is either 1, 2, or 4 bytes
     if (size != 1 && size != 2 && size != 4) {
         printf("Error: Invalid memory read size %d. Only 1, 2, or 4 bytes allowed.\n", size);
         return 0;
@@ -91,13 +110,11 @@ uint32_t read_memory(uint32_t address, int size) {
 
 // Write 1, 2, or 4 bytes to memory (little-endian format)
 void write_memory(uint32_t address, uint32_t value, int size) {
-    // Ensure size is either 1, 2, or 4 bytes
     if (size != 1 && size != 2 && size != 4) {
         printf("Error: Invalid memory write size %d. Only 1, 2, or 4 bytes allowed.\n", size);
         return;
     }
 
-    // Store each byte in little-endian order
     for (int i = 0; i < size; i++) {
         memory[address + i] = (value >> (8 * i)) & 0xFF;
     }
@@ -107,19 +124,61 @@ void write_memory(uint32_t address, uint32_t value, int size) {
 
 // Fetch instruction from memory
 uint32_t fetch() {
-    return read_memory(pc, 4); // Fetch 4-byte instruction at PC
+    return read_memory(pc);
 }
 
-// Decode and execute instruction (simple placeholder)
+// Function to handle I-type instructions
+void handle_i_type_instruction(uint32_t instruction) {
+    int32_t imm = (instruction >> 20) & 0xFFF;
+    uint32_t rd = (instruction >> 7) & 0x1F;
+    uint32_t rs1 = (instruction >> 15) & 0x1F;
+    uint32_t funct3 = (instruction >> 12) & 0x7;
+    uint32_t opcode = instruction & 0x7F;
+
+    switch (opcode) {
+        case 0x03: // Load Instructions
+            switch (funct3) {
+                case 0x0: registers[rd] = (int8_t)read_memory(registers[rs1] + imm, 1); break;
+                case 0x1: registers[rd] = (int16_t)read_memory(registers[rs1] + imm, 2); break;
+                case 0x2: registers[rd] = read_memory(registers[rs1] + imm, 4); break;
+                case 0x4: registers[rd] = (uint8_t)read_memory(registers[rs1] + imm, 1); break;
+                case 0x5: registers[rd] = (uint16_t)read_memory(registers[rs1] + imm, 2); break;
+                default: printf("Unsupported Load instruction: 0x%X\n", funct3); break;
+            }
+            break;
+
+        case 0x13: // Arithmetic and Shift Instructions
+            switch (funct3) {
+                case 0x0: registers[rd] = registers[rs1] + imm; break;
+                case 0x2: registers[rd] = (registers[rs1] < imm) ? 1 : 0; break;
+                case 0x3: registers[rd] = ((uint32_t)registers[rs1] < (uint32_t)imm) ? 1 : 0; break;
+                case 0x4: registers[rd] = registers[rs1] ^ imm; break;
+                case 0x6: registers[rd] = registers[rs1] | imm; break;
+                case 0x7: registers[rd] = registers[rs1] & imm; break;
+                case 0x1: registers[rd] = registers[rs1] << imm; break;
+                case 0x5: 
+                    if ((instruction >> 30) & 1) registers[rd] = (int32_t)registers[rs1] >> imm; 
+                    else registers[rd] = (uint32_t)registers[rs1] >> imm;
+                    break;
+                default: printf("Unsupported Arithmetic/Shift instruction: 0x%X\n", funct3); break;
+            }
+            break;
+
+        case 0x67: // JALR
+            registers[rd] = pc + 4;
+            pc = (registers[rs1] + imm) & ~1;
+            break;
+
+        default:
+            printf("Unsupported I-Type opcode: 0x%X\n", opcode);
+            break;
+    }
+}
+
+// Decode and execute instruction
 void decode_and_execute(uint32_t instruction) {
     printf("Executing instruction 0x%08X at PC 0x%X\n", instruction, pc);
-
-    if (instruction == 0x00000000) {
-        printf("Encountered invalid instruction (0x00000000), stopping execution.\n");
-        exit(0);
-    }
-
-    // Placeholder for actual instruction handling
+    if (instruction == 0x00000000) exit(0);
 }
 
 // Main loop: Fetch-Decode-Execute cycle
@@ -127,26 +186,13 @@ void run_simulation() {
     while (1) {
         uint32_t instruction = fetch();
         decode_and_execute(instruction);
-        pc += 4; // Increment PC by 4 after executing an instruction
+        pc += 4;
     }
 }
 
 int main() {
-    parse_and_store("test.mem"); // Load memory image from file
-    print_memory(0, 10); // Print first 10 instructions for verification
-
-    // Demonstrate read and write memory functions
-    write_memory(0x1000, 0xAB, 1);
-    read_memory(0x1000, 1);
-    
-    write_memory(0x2000, 0x1234, 2);
-    read_memory(0x2000, 2);
-    
-    write_memory(0x3000, 0xDEADBEEF, 4);
-    read_memory(0x3000, 4);
-
+    parse_and_store("test.mem");
     printf("\nStarting simulation...\n");
-    run_simulation(); // Start executing instructions from memory
-
+    run_simulation();
     return 0;
 }
