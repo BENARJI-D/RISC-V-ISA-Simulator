@@ -175,6 +175,62 @@ void handle_i_type_instruction(uint32_t instruction) {
     }
 }
 
+ // Function to handle R-type instructions
+
+void handle_r_type_instruction(uint32_t instruction) {
+    // Extract fields from the instruction
+    uint32_t rd = (instruction >> 7) & 0x1F;      // Bits [11:7] - Destination Register
+    uint32_t funct3 = (instruction >> 12) & 0x7;  // Bits [14:12] - Function Code
+    uint32_t rs1 = (instruction >> 15) & 0x1F;    // Bits [19:15] - Source Register 1
+    uint32_t rs2 = (instruction >> 20) & 0x1F;    // Bits [24:20] - Source Register 2
+    uint32_t funct7 = (instruction >> 25) & 0x7F; // Bits [31:25] - Function Code
+    uint32_t opcode = instruction & 0x7F;         // Bits [6:0] - Opcode
+
+    // Ensure it's an R-type instruction (opcode should be 0110011 in binary, i.e., 0x33)
+    if (opcode != 0x33) {
+        return; // Not an R-type instruction, return immediately
+    }
+
+    // Decode and execute the R-type instruction
+    switch (funct3) {
+        case 0x0: // ADD or SUB
+            if (funct7 == 0x00) { // ADD
+                registers[rd] = registers[rs1] + registers[rs2];
+            } else if (funct7 == 0x20) { // SUB
+                registers[rd] = registers[rs1] - registers[rs2];
+            }
+            break;
+        case 0x1: // SLL (Shift Left Logical)
+            registers[rd] = registers[rs1] << (registers[rs2] & 0x1F);
+            break;
+        case 0x2: // SLT (Set Less Than)
+            registers[rd] = (int32_t)registers[rs1] < (int32_t)registers[rs2];
+            break;
+        case 0x3: // SLTU (Set Less Than Unsigned)
+            registers[rd] = registers[rs1] < registers[rs2];
+            break;
+        case 0x4: // XOR
+            registers[rd] = registers[rs1] ^ registers[rs2];
+            break;
+        case 0x5: // SRL (Shift Right Logical) or SRA (Shift Right Arithmetic)
+            if (funct7 == 0x00) { // SRL
+                registers[rd] = registers[rs1] >> (registers[rs2] & 0x1F);
+            } else if (funct7 == 0x20) { // SRA
+                registers[rd] = (int32_t)registers[rs1] >> (registers[rs2] & 0x1F);
+            }
+            break;
+        case 0x6: // OR
+            registers[rd] = registers[rs1] | registers[rs2];
+            break;
+        case 0x7: // AND
+            registers[rd] = registers[rs1] & registers[rs2];
+            break;
+        default:
+            break; // Unknown R-type instruction, do nothing
+    }
+}
+
+
 // Decode and execute instruction
 void decode_and_execute(uint32_t instruction) {
     printf("Executing instruction 0x%08X at PC 0x%X\n", instruction, pc);
