@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <map> // Change from unordered_map to map
+#include <map> 
 
 using namespace std;
 
@@ -93,23 +93,33 @@ void parse_and_store(const char *filename) {
 
 // Read 1, 2, or 4 bytes from memory (little-endian format)
 uint32_t read_memory(uint32_t address, int size = 4) {
+    if ((int32_t)address < 0) {
+        printf("Error: Negative address 0x%X is not valid.\n", address);
+        exit(1);
+    }
+    
     uint32_t value = 0;
 
-    if (size != 1 && size != 2 && size != 4) {
+    if (size == 1 || size == 2 || size == 4) {
+        for (int i = 0; i < size; i++) {
+            value |= (memory[address + i] << (8 * i));
+        }
+        printf("Read %d-byte value 0x%X from address 0x%X\n", size, value, address);
+        return value;
+    } else {
         printf("Error: Invalid memory read size %d. Only 1, 2, or 4 bytes allowed.\n", size);
         return 0;
     }
-
-    for (int i = 0; i < size; i++) {
-        value |= (memory[address + i] << (8 * i));
-    }
-
-    printf("Read %d-byte value 0x%X from address 0x%X\n", size, value, address);
-    return value;
 }
 
+
 // Write 1, 2, or 4 bytes to memory (little-endian format)
-void write_memory(uint32_t address, uint32_t value, int size) {
+void write_memory(uint32_t address, uint32_t value, int size = 4) {
+    if ((int32_t)address < 0) {
+        printf("Error: Negative address 0x%X is not valid.\n", address);
+        exit(1);
+    }
+
     if (size != 1 && size != 2 && size != 4) {
         printf("Error: Invalid memory write size %d. Only 1, 2, or 4 bytes allowed.\n", size);
         return;
@@ -127,9 +137,26 @@ uint32_t fetch() {
     return read_memory(pc);
 }
 
-// Function to handle I-type instructions
+// Check if a memory address is used
+bool is_memory_used(uint32_t address) {
+    return memory.find(address) != memory.end();
+}
+
+// Function to print the stack memory
+void print_stack(uint32_t start_address, uint32_t end_address) {
+    printf("Stack Memory (0x%X to 0x%X):\n", start_address, end_address);
+    for (uint32_t address = start_address; address <= end_address; address += 4) {
+        if (is_memory_used(address)) {
+            printf("0x%X: 0x%X\n", address, read_memory(address, 4));
+        } else {
+            printf("0x%X: [unused]\n", address);
+        }
+    }
+}
+
+// Function to handle I-type instructions with signed immediate
 void handle_i_type_instruction(uint32_t instruction) {
-    int32_t imm = (instruction >> 20) & 0xFFF;
+    int32_t imm = instruction >> 20; // Use sign_extend only for loads
     uint32_t rd = (instruction >> 7) & 0x1F;
     uint32_t rs1 = (instruction >> 15) & 0x1F;
     uint32_t funct3 = (instruction >> 12) & 0x7;
@@ -137,34 +164,40 @@ void handle_i_type_instruction(uint32_t instruction) {
 
     switch (opcode) {
         case 0x03: // Load Instructions
+            imm = sign_extend(imm); // Sign-extend only for loads
             switch (funct3) {
-                case 0x0: registers[rd] = (int8_t)read_memory(registers[rs1] + imm, 1); break;
-                case 0x1: registers[rd] = (int16_t)read_memory(registers[rs1] + imm, 2); break;
-                case 0x2: registers[rd] = read_memory(registers[rs1] + imm, 4); break;
-                case 0x4: registers[rd] = (uint8_t)read_memory(registers[rs1] + imm, 1); break;
-                case 0x5: registers[rd] = (uint16_t)read_memory(registers[rs1] + imm, 2); break;
+                case 0x0: registers[rd] = read_memory(registers[rs1] + imm, 1); break; // LB: Load Byte (signed)
+                case 0x1: registers[rd] = read_memory(registers[rs1] + imm, 2); break; // LH: Load Halfword (signed)
+                case 0x2: registers[rd] = read_memory(registers[rs1] + imm, 4); break; // LW: Load Word
+                case 0x4: registers[rd] = read_memory(registers[rs1] + imm, 1); break; // LBU: Load Byte (unsigned)
+                case 0x5: registers[rd] = read_memory(registers[rs1] + imm, 2); break; // LHU: Load Halfword (unsigned)
                 default: printf("Unsupported Load instruction: 0x%X\n", funct3); break;
             }
             break;
 
         case 0x13: // Arithmetic and Shift Instructions
             switch (funct3) {
-                case 0x0: registers[rd] = registers[rs1] + imm; break;
-                case 0x2: registers[rd] = (registers[rs1] < imm) ? 1 : 0; break;
-                case 0x3: registers[rd] = ((uint32_t)registers[rs1] < (uint32_t)imm) ? 1 : 0; break;
-                case 0x4: registers[rd] = registers[rs1] ^ imm; break;
-                case 0x6: registers[rd] = registers[rs1] | imm; break;
-                case 0x7: registers[rd] = registers[rs1] & imm; break;
-                case 0x1: registers[rd] = registers[rs1] << imm; break;
-                case 0x5: 
-                    if ((instruction >> 30) & 1) registers[rd] = (int32_t)registers[rs1] >> imm; 
-                    else registers[rd] = (uint32_t)registers[rs1] >> imm;
+                case 0x0: registers[rd] = registers[rs1] + imm; break; // ADDI: Add Immediate
+                case 0x2: registers[rd] = (registers[rs1] < (uint32_t)imm) ? 1 : 0; break; // SLTI: Set Less Than Immediate (signed)
+                case 0x3: registers[rd] = ((uint32_t)registers[rs1] < (uint32_t)imm) ? 1 : 0; break; // SLTIU: Set Less Than Immediate (unsigned)
+                case 0x4: registers[rd] = registers[rs1] ^ imm; break; // XORI: XOR Immediate
+                case 0x6: registers[rd] = registers[rs1] | imm; break; // ORI: OR Immediate
+                case 0x7: registers[rd] = registers[rs1] & imm; break; // ANDI: AND Immediate
+                case 0x1: registers[rd] = registers[rs1] << imm; break; // SLLI: Shift Left Logical Immediate
+                case 0x5: {
+                    bool is_arithmetic = (instruction >> 30) & 1;
+                    if (is_arithmetic) {
+                        registers[rd] = sign_extend(sign_extend(registers[rs1]) >> imm); // SRAI
+                    } else {
+                        registers[rd] = registers[rs1] >> imm; // SRLI
+                    }
                     break;
+                }
                 default: printf("Unsupported Arithmetic/Shift instruction: 0x%X\n", funct3); break;
             }
             break;
 
-        case 0x67: // JALR
+        case 0x67: // JALR: Jump And Link Register
             registers[rd] = pc + 4;
             pc = (registers[rs1] + imm) & ~1;
             break;
@@ -232,9 +265,18 @@ void handle_r_type_instruction(uint32_t instruction) {
 
 
 // Decode and execute instruction
+
 void decode_and_execute(uint32_t instruction) {
     printf("Executing instruction 0x%08X at PC 0x%X\n", instruction, pc);
     if (instruction == 0x00000000) exit(0);
+    uint32_t opcode = instruction & 0x7F;
+    if (opcode == 0x33) {
+        handle_r_type_instruction(instruction);
+    } else if (opcode == 0x03 || opcode == 0x13 || opcode == 0x67) {
+        handle_i_type_instruction(instruction);
+    } else {
+        printf("Unsupported instruction opcode: 0x%X\n", opcode);
+    }
 }
 
 // Main loop: Fetch-Decode-Execute cycle
