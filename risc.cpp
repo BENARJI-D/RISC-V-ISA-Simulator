@@ -5,7 +5,7 @@
 
 using namespace std;
 
-map<uint32_t, uint8_t> memory; // Ordered map for memory
+map<uint32_t, uint8_t> memory; // Ordered mapi for memory
 uint32_t registers[32]; // Simulated registers
 uint32_t pc = 0; // Program Counter initialized to 0
 
