@@ -262,6 +262,30 @@ void handle_r_type_instruction(uint32_t instruction) {
             break; // Unknown R-type instruction, do nothing
     }
 }
+// Function to handle Jump instructions
+void handle_j_type_instruction(uint32_t instruction) {
+    // Extract fields from the instruction
+    uint32_t rd = (instruction >> 7) & 0x1F;       // Bits [11:7] - Destination Register
+    uint32_t imm = ((instruction >> 12) & 0xFF) << 12 |  // Bits [19:12] - Immediate[19:12]
+                   ((instruction >> 20) & 1) << 11 |     // Bit  [20] - Immediate[11]
+                   ((instruction >> 21) & 0x3FF) << 1 |  // Bits [30:21] - Immediate[10:1]
+                   ((instruction >> 31) ? 0xFFE00000 : 0); // Bit [31] - Sign extension
+    
+    uint32_t opcode = instruction & 0x7F;          // Bits [6:0] - Opcode
+
+    // Ensure it's a J-type instruction (JAL opcode should be 1101111 in binary, i.e., 0x6F)
+    if (opcode != 0x6F) {
+        return; // Not a JAL instruction, return immediately
+    }
+
+    // Perform sign extension using the function
+    imm = sign_extend(imm);
+
+    // Execute JAL: Store return address (PC + 4) in rd, then jump
+    registers[rd] = pc + 4; // Store return address
+    pc += imm; // Jump to target address
+}
+
 
 
 // Decode and execute instruction
