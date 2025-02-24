@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <map> 
+#include <map>
 
 using namespace std;
 
@@ -97,7 +97,7 @@ uint32_t read_memory(uint32_t address, int size = 4) {
         printf("Error: Negative address 0x%X is not valid.\n", address);
         exit(1);
     }
-    
+
     uint32_t value = 0;
 
     if (size == 1 || size == 2 || size == 4) {
@@ -287,6 +287,67 @@ void handle_j_type_instruction(uint32_t instruction) {
 }
 
 
+void handle_s_type_instruction(uint32_t instruction){
+ //extracting feilds from the instruction
+ uint32_t opcode = instruction & 0x7F;
+ uint32_t imm_4to0 = (instruction >> 7) & 0x1F;
+ int32_t imm_11to5 = (instruction >> 25) & 0x7F;
+ uint32_t rs1 = (instruction >> 14) & 0x1F;
+ uint32_t rs2 =  (instruction >> 19) & 0x1F;
+ uint32_t func3 = (instruction >> 19) & 0x7;
+
+ int32_t imm = (imm_11to5 << 5) | imm_4to0;
+    if (imm & (1 << 11)) { // Sign extend for 12-bit immediate
+        imm |= 0xFFFFF000;
+    }
+
+    // Compute effective memory address
+    uint32_t address = registers[rs1] + imm;
+    uint32_t value = registers[rs2];
+
+    // Execute the appropriate S-Type instruction
+    if (opcode == 0x23) {  // Check if it's a store instruction
+        switch (func3) {
+            case 0x0: // SB (Store Byte)
+                write_memory(address, value & 0xFF, 1);
+                break;
+            case 0x1: // SH (Store Halfword)
+                write_memory(address, value & 0xFFFF, 2);
+                break;
+            case 0x2: // SW (Store Word)
+                write_memory(address, value, 4);
+                break;
+            default:
+                printf("Unsupported S-Type instruction: opcode=0x%X, funct3=0x%X\n", opcode, func3);
+                break;
+        }
+    } else {
+        printf("Invalid opcode for S-Type instruction: 0x%X\n", opcode);
+    }
+
+ }
+
+void handle_u_type_instruction(uint32_t instruction) {
+    uint32_t opcode = instruction & 0x7F;     // Extract opcode (bits 6:0)
+    uint32_t rd = (instruction >> 7) & 0x1F;  // Extract rd (bits 11:7)
+    int32_t imm = (instruction >> 12) & 0xFFFFF;   // Extract immediate (bits 31:12) and align it
+
+switch (opcode) {
+        case 0x37: // LUI
+            // Simulated operation: Load the upper immediate into the register
+            registers[rd] = imm;
+            break;
+
+        case 0x17: // AUIPC
+            // Simulated operation: Add immediate to PC and store in rd
+            registers[rd] = pc + imm;
+            break;
+
+        default:
+            printf("Unsupported S-Type instruction: opcode=0x%X", opcode);
+            break;
+    }
+}
 
 // Decode and execute instruction
 
