@@ -306,7 +306,7 @@ void handle_j_type_instruction(uint32_t instruction) {
     enforce_register_zero();
 }
 
-// Function to hangle S-type instructions
+// Function to handle S-type instructions
 void handle_s_type_instruction(uint32_t instruction){
     //extracting feilds from the instruction
     uint32_t opcode = instruction & 0x7F;
@@ -371,6 +371,43 @@ void handle_u_type_instruction(uint32_t instruction) {
         }
         enforce_register_zero();
     }
+//function to handle B-type instructions
+void handle_b_type_instruction(unit32_t instruction) {
+    init32_t imm = ((instruction & 0x80000000) >> 19 ) |    //bit[31]] =imm[12] 
+    ((instruction & 0x80) <<4) |                            //bit[7]  = imm[11]
+    ((instruction & 0x7E000000) >> 20) |                   //bit[25:30] =imm[10:5]
+    ((instruction & 0xF00) >> 7);                          //bit[8:11] =imm[4:1]
+      if (instruction & 0x80000000) {
+     imm =imm | 0xFFFFF000;                              //Extesion for negative numbers
+      }     
+    unit32_t rs1 = (instruction >> 15 ) & 0x1F;
+    unit32_t rs2 = (instruction >> 20) & 0x1F;
+    unit32_t funct3 = (instruction >> 12) & 0x7;
+    unit32_t opcode = instruction & 0x7F;
+    switch (funct3) {
+        case 0x0: if (registers[rs1] == registers[rs2])    //BEQ (Branch if equal)
+                   pc = pc + imm;
+                   break;          
+        case 0x1: if (registers[rs1] != registers[rs2])    //BNE  (Branch if not equal)
+                   pc = pc + imm;
+                   break;          
+        case 0x2:  if (registers[rs1] < registers[rs2])    //BLT (Branch if less than)
+                   pc = pc + imm;
+                   break;   
+        case 0x3: if(registers[rs1] >= registers[rs2])    //BGE (Branch if greater than or equal)
+                   pc = pc + imm;   
+                   break;
+        case 0x4: if((unsigned)registers[rs1] < (unsigned)registers[rs2])  //BLTU(Branch if less than unsigned)
+                   pc = pc + imm;
+                   break;   
+        case 0x5: if((unsigned)registers[rs1] >= (unsigned)registers[rs2])  //BGEU(Branch if greater than or equal unsigned)
+                   pc = pc + imm;
+                   break;    
+        default: printf("unsupported branch instruction: 0x%X\n",funct3);
+                break;
+    }
+    enforce_register_zero();
+}
     
 // Decode and execute instruction
 void decode_and_execute(uint32_t instruction) {
