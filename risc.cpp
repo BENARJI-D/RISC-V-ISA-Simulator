@@ -292,9 +292,9 @@ void handle_s_type_instruction(uint32_t instruction){
  uint32_t opcode = instruction & 0x7F;
  uint32_t imm_4to0 = (instruction >> 7) & 0x1F;
  int32_t imm_11to5 = (instruction >> 25) & 0x7F;
- uint32_t rs1 = (instruction >> 14) & 0x1F;
- uint32_t rs2 =  (instruction >> 19) & 0x1F;
- uint32_t func3 = (instruction >> 19) & 0x7;
+ uint32_t rs1 = (instruction >> 15) & 0x1F;
+ uint32_t rs2 =  (instruction >> 20) & 0x1F;
+ uint32_t func3 = (instruction >> 12) & 0x7;
 
  int32_t imm = (imm_11to5 << 5) | imm_4to0;
     if (imm & (1 << 11)) { // Sign extend for 12-bit immediate
@@ -359,7 +359,11 @@ void decode_and_execute(uint32_t instruction) {
         handle_r_type_instruction(instruction);
     } else if (opcode == 0x03 || opcode == 0x13 || opcode == 0x67) {
         handle_i_type_instruction(instruction);
-    } else {
+    } else if (opcode == 0x23) {
+        handle_s_type_instruction(instruction);  
+    } else if (opcode == 0x37 || opcode == 0x17) {
+        handle_u_type_instruction(instruction);  
+    }  else {
         printf("Unsupported instruction opcode: 0x%X\n", opcode);
     }
 }
@@ -374,7 +378,7 @@ void run_simulation() {
 }
 
 int main() {
-    parse_and_store("test.mem");
+    parse_and_store("test_s.mem");
     printf("\nStarting simulation...\n");
     run_simulation();
     return 0;
