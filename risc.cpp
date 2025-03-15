@@ -182,8 +182,7 @@ void handle_i_type_instruction(uint32_t instruction) {
     uint32_t funct3 = (instruction >> 12) & 0x7;
     uint32_t opcode = instruction & 0x7F;
     uint32_t shamt = (instruction >> 20) & 0x1F;
-    int a;
-    
+        
         switch (opcode) {
         case 0x03: // Load Instructions
             switch (funct3) {
@@ -199,7 +198,7 @@ void handle_i_type_instruction(uint32_t instruction) {
         case 0x13: // Arithmetic and Shift Instructions
             switch (funct3) {
                 case 0x0: registers[rd] = registers[rs1] + sign_extend(imm,12);break; // ADDI: Add Immediate
-                case 0x2: a= registers[rs1];registers[rd] = (a< sign_extend(imm,12) ? 1 : 0);break; // SLTI: Set Less Than Immediate (signed)
+                case 0x2: registers[rd] = ((int32_t)registers[rs1] < (int32_t)sign_extend(imm, 12)) ? 1 : 0;break; // SLTI: Set Less Than Immediate (signed)
                 case 0x3: registers[rd] = (registers[rs1] < (uint32_t)sign_extend(imm,12)) ? 1 : 0; break; // SLTIU: Set Less Than Immediate (unsigned)
                 case 0x4: registers[rd] = registers[rs1] ^ sign_extend(imm,12);break; // XORI: XOR Immediate
                 case 0x6: registers[rd] = registers[rs1] | sign_extend(imm,12);break; // ORI: OR Immediate
@@ -208,7 +207,7 @@ void handle_i_type_instruction(uint32_t instruction) {
                 case 0x5: {
                     bool is_arithmetic = (instruction >> 30) & 1;
                     if (is_arithmetic) {
-                        registers[rd] = sign_extend(registers[rs1] >> shamt,32); printf("Unsupported Load instruction: 0x%X\n", funct3);// SRAI
+                        registers[rd] = sign_extend(registers[rs1] >> shamt,(32-shamt));// SRAI
                     } else {
                         registers[rd] = registers[rs1] >> shamt; // SRLI
                     }
@@ -438,7 +437,7 @@ void run_simulation() {
 int main() {
     registers[2]= 65536;
     pc= 0;
-    parse_and_store("test.mem");
+    parse_and_store("andi.mem");
     printf("\nStarting simulation...\n");
     run_simulation();
     return 0;
