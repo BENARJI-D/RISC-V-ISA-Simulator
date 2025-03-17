@@ -280,7 +280,7 @@ void handle_j_type_instruction(uint32_t instruction) {
                ((instruction >> 31) ? 0xFFE00000 : 0); // Bit [31] - Sign extension
     uint32_t opcode = instruction & 0x7F;          // Bits [6:0] - Opcode
     
-    imm = sign_extend(imm, 21); // Perform sign extension
+    imm = sign_extend(imm, 20); // Perform sign extension
     uint32_t target_address = pc + 4 + imm;
     
     // Check for word alignment (RISC-V requires 4-byte alignment)
