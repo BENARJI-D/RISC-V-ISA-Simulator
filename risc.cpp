@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <map> 
 #include <math.h>
+#include <iostream>
 
 using namespace std;
 
@@ -174,6 +176,8 @@ void print_registers() {
 }
 
 
+
+
 // Function to handle I-type instructions with signed immediate
 void handle_i_type_instruction(uint32_t instruction) {
     int imm = (instruction >> 20) & 0xFFF; 
@@ -285,7 +289,7 @@ void handle_r_type_instruction(uint32_t instruction) {
 }
 
 // Function to handle Jump instructions
-void handle_j_type_instruction(uint32_t instruction) {
+/*void handle_j_type_instruction(uint32_t instruction) {
     uint32_t rd = (instruction >> 7) & 0x1F;       // Bits [11:7] - Destination Register
     int imm = ((instruction >> 12) & 0xFF) << 12 |  // Bits [19:12] - Immediate[19:12]
                    ((instruction >> 20) & 1) << 11 |     // Bit  [20] - Immediate[11]
@@ -295,6 +299,33 @@ void handle_j_type_instruction(uint32_t instruction) {
     imm = sign_extend(imm,20);// Perform sign extension using the function
     registers[rd] = pc + 4; // Store return address
     pc += imm; // Jump to target address
+    enforce_register_zero();
+}*/
+
+void handle_exception(const char* cause, uint32_t address) {
+    std::cerr << "Exception: " << cause << ", Address: 0x" << std::hex << address << std::dec << std::endl;
+}
+
+void handle_j_type_instruction(uint32_t instruction) {
+    uint32_t rd = (instruction >> 7) & 0x1F;       // Bits [11:7] - Destination Register
+    int imm = ((instruction >> 12) & 0xFF) << 12 |  // Bits [19:12] - Immediate[19:12]
+               ((instruction >> 20) & 1) << 11 |     // Bit  [20] - Immediate[11]
+               ((instruction >> 21) & 0x3FF) << 1 |  // Bits [30:21] - Immediate[10:1]
+               ((instruction >> 31) ? 0xFFE00000 : 0); // Bit [31] - Sign extension
+    uint32_t opcode = instruction & 0x7F;          // Bits [6:0] - Opcode
+    
+    imm = sign_extend(imm, 21); // Perform sign extension
+    uint32_t target_address = pc + 4 + imm;
+    
+    // Check for word alignment (RISC-V requires 4-byte alignment)
+    if (target_address % 4 != 0) {
+        handle_exception("Instruction address misaligned", target_address);
+        return; // Do not perform the jump
+    }
+    
+    registers[rd] = pc + 4; // Store return address
+    pc = target_address; // Jump to target address
+    
     enforce_register_zero();
 }
 
